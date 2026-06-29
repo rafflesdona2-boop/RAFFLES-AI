@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peace Sign Blur Web v7 ✌️</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #121212;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+            font-size: 1.8rem;
+            color: #00e676;
+        }
+
+        p {
+            margin: 0 0 20px 0;
+            color: #aaaaaa;
+            text-align: center;
+        }
+
+        .container {
+            position: relative;
+            width: 720px;
+            height: 405px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            background: #222;
+        }
+
+        video {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Efek mirror */
+            transition: filter 0.15s ease;
+        }
+
+        .blur-effect {
+            filter: blur(35px); /* Efek sensor blur pekat */
+        }
+
+        .loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+            font-size: 1.1rem;
+        }
+
+        .error-msg {
+            color: #ff5252;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+</head>
+<body>
+
+    <h1>TREND: Peace Sign Blur! ✌️</h1>
+    <p>Tunjukkan peace → layar blur | Lepaskan → layar normal</p>
+
+    <div class="container">
+        <video id="webcam" autoplay playsinline muted></video>
+        <div id="loading" class="loading">
+            <div id="status-text">Mengunduh Model TensorFlow AI...</div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById("webcam");
+        const loadingDiv = document.getElementById("loading");
+        const statusText = document.getElementById("status-text");
+        let model = null;
+
+        // 1. Fungsi Logika Hitung Jari Peace Sign (Disinkronkan dengan logika Python)
+        function isPeaceSign(landmarks) {
+            // Indeks landmark TensorFlow Handpose:
+            // 6-8: Jari Telunjuk | 10-12: Jari Tengah | 14-16: Jari Manis | 18-20: Jari Kelingking
+            const indexUp = landmarks[8][1] < landmarks[6][1];
+            const middleUp = landmarks[12][1] < landmarks[10][1];
+            const ringDown = landmarks[16][1] > landmarks[14][1];
+            const pinkyDown = landmarks[20][1] > landmarks[18][1];
+
+            return indexUp && middleUp && ringDown && pinkyDown;
+        }
+
+        // 2. Inisialisasi Model Google Handpose
+        async function initApp() {
+            try {
+                statusText.innerText = "Mengaktifkan Mesin AI Google...";
+                model = await handpose.load();
+                
+                statusText.innerText = "Meminta Akses Kamera... Klik 'Izinkan' (Allow)";
+                startCamera();
+            } catch (error) {
+                console.error(error);
+                showError("Gagal memuat pustaka TensorFlow AI dari internet. Pastikan koneksi lancar.");
+            }
+        }
+
+        // 3. Mengaktifkan Kamera Browser
+        function startCamera() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({
+                    video: { width: 720, height: 405, facingMode: "user" }
+                })
+                .then((stream) => {
+                    video.srcObject = stream;
+                    video.onloadedmetadata = () => {
+                        loadingDiv.style.display = "none"; // Hilangkan layar loading
+                        predictWebcam();
+                    };
+                })
+                .catch((err) => {
+                    console.error(err);
+                    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                        showError("Akses kamera DITOLAK! Klik ikon gembok di sebelah kiri alamat situs (URL) atas, ganti Kamera menjadi 'Izinkan' (Allow), lalu refresh.");
+                    } else {
+                        showError("Kamera tidak ditemukan atau sedang dipakai aplikasi lain (seperti OBS/Zoom/Skrip Python).");
+                    }
+                });
+            } else {
+                showError("Browser Anda tidak mengizinkan pemanggilan kamera secara lokal.");
+            }
+        }
+
+        // 4. Deteksi Berkelanjutan Frame Demi Frame
+        async function predictWebcam() {
+            if (model) {
+                // Lakukan estimasi posisi tangan pada video
+                const predictions = await model.estimateHands(video);
+                let peaceDetected = false;
+
+                if (predictions.length > 0) {
+                    for (let i = 0; i < predictions.length; i++) {
+                        // predictions[i].landmarks berisi array 21 poin koordinat tangan
+                        if (isPeaceSign(predictions[i].landmarks)) {
+                            peaceDetected = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Tambah/Hapus efek blur via CSS class
+                if (peaceDetected) {
+                    video.classList.add("blur-effect");
+                } else {
+                    video.classList.remove("blur-effect");
+                }
+            }
+            
+            // Loop ke frame berikutnya secara realtime
+            requestAnimationFrame(predictWebcam);
+        }
+
+        function showError(message) {
+            statusText.innerHTML = `<div class="error-msg">MASALAH:</div><div style="margin-top:10px; font-size:0.95rem; color:#eee;">${message}</div>`;
+        }
+
+        // Mulai aplikasi saat halaman web terbuka sempurna
+        window.addEventListener("load", initApp);
+    </script>
+</body>
+</html>
